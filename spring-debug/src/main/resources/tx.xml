@@ -17,14 +17,14 @@
     <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
         <property name="dataSource" ref="dataSource"></property>
     </bean>
-    <bean id="bookService" class="com.mashibing.tx.xml.service.BookService">
+    <bean id="bookService" class="com.sewellzhong.tx.xml.service.BookService">
         <property name="bookDao" ref="bookDao"></property>
     </bean>
-    <bean id="bookDao" class="com.mashibing.tx.xml.dao.BookDao">
+    <bean id="bookDao" class="com.sewellzhong.tx.xml.dao.BookDao">
         <property name="jdbcTemplate" ref="jdbcTemplate"></property>
     </bean>
     <aop:config>
-        <aop:pointcut id="txPoint" expression="execution(* com.mashibing.tx.xml.*.*.*(..))"/>
+        <aop:pointcut id="txPoint" expression="execution(* com.sewellzhong.tx.xml.*.*.*(..))"/>
         <aop:advisor advice-ref="myAdvice" pointcut-ref="txPoint"></aop:advisor>
     </aop:config>
     <tx:advice id="myAdvice" transaction-manager="transactionManager">
@@ -33,5 +33,5 @@
             <tx:method name="updateStock" propagation="REQUIRES_NEW" />
         </tx:attributes>
     </tx:advice>
-    <bean class="com.mashibing.MyBeanFactoryPostProcessorBySelf"></bean>
+    <bean class="com.sewellzhong.MyBeanFactoryPostProcessorBySelf"></bean>
 </beans>

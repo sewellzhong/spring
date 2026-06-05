@@ -29,7 +29,7 @@ import org.springframework.lang.Nullable;
  * 	默认实现的子类是FixedThemeResolver,获取资源的名称是ThemeResolver的工作，而根据资源名称找到主题就是ThemeSource的作用了
  *
  * 	我们可以自己配置ThemeResolver和ThemeSource对象
- * 	<bean id="themeSource" class="org.springframework.ui.context.support.ResourceBundleThemeSource" p:basenamePrefix="com.mashibing.theme."></bean>
+ * 	<bean id="themeSource" class="org.springframework.ui.context.support.ResourceBundleThemeSource" p:basenamePrefix="com.sewellzhong.theme."></bean>
  *	<bean id="themeResolver" class="org.springframework.web.servlet.theme.CookieThemeResolver" p:defaultThemeName="default"></bean>
  *
  *	在进行主题切换的时候，同样也是通过拦截器来实现的

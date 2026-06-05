@@ -4,9 +4,9 @@
        xmlns:context="http://www.springframework.org/schema/context"
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/context https://www.springframework.org/schema/context/spring-context.xsd">
 
-    <context:component-scan base-package="com.mashibing"></context:component-scan>
+    <context:component-scan base-package="com.sewellzhong"></context:component-scan>
 
-    <bean id="person" class="com.mashibing.Person" >
+    <bean id="person" class="com.sewellzhong.Person" >
         <property name="id" value="1"></property>
         <property name="name" value="zhangsan"></property>
 <!--        <constructor-arg name="id" value="1"></constructor-arg>-->

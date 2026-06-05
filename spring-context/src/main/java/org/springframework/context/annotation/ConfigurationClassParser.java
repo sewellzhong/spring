@@ -320,12 +320,12 @@ class ConfigurationClassParser {
 			for (AnnotationAttributes componentScan : componentScans) {
 				// The config class is annotated with @ComponentScan -> perform the scan immediately
 				// 解析@ComponentScan和@ComponentScans配置的扫描的包所包含的类
-				// 比如 basePackages = com.mashibing, 那么在这一步会扫描出这个包及子包下的class，然后将其解析成BeanDefinition
+				// 比如 basePackages = com.sewellzhong, 那么在这一步会扫描出这个包及子包下的class，然后将其解析成BeanDefinition
 				// (BeanDefinition可以理解为等价于BeanDefinitionHolder)
 				Set<BeanDefinitionHolder> scannedBeanDefinitions =
 						this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
 				// Check the set of scanned definitions for any further config classes and parse recursively if needed
-				// 通过上一步扫描包com.mashibing，有可能扫描出来的bean中可能也添加了ComponentScan或者ComponentScans注解.
+				// 通过上一步扫描包com.sewellzhong，有可能扫描出来的bean中可能也添加了ComponentScan或者ComponentScans注解.
 				//所以这里需要循环遍历一次，进行递归(parse)，继续解析，直到解析出的类上没有ComponentScan和ComponentScans
 				for (BeanDefinitionHolder holder : scannedBeanDefinitions) {
 					BeanDefinition bdCand = holder.getBeanDefinition().getOriginatingBeanDefinition();

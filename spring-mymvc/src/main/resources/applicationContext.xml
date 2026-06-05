@@ -18,9 +18,9 @@
 <!--        </property>-->
 <!--    </bean>-->
 
-<!--    <bean id="userController" class="com.mashibing.controller.HelloController2" />-->
+<!--    <bean id="userController" class="com.sewellzhong.controller.HelloController2" />-->
 
-<!--    <context:component-scan base-package="com.mashibing"></context:component-scan>-->
+<!--    <context:component-scan base-package="com.sewellzhong"></context:component-scan>-->
 <!--    <bean id="viewResolver" class="org.springframework.web.servlet.view.InternalResourceViewResolver">-->
 <!--        <property name="prefix" value="/WEB-INF/jsp/" />-->
 <!--        <property name="suffix" value=".jsp" />-->
@@ -29,8 +29,8 @@
 <!--        <property name="maxUploadSize" value="17367648787"></property>-->
 <!--        <property name="defaultEncoding" value="UTF-8"></property>-->
 <!--    </bean>-->
-<!--    <bean name="/test01" class="com.mashibing.controller.testController.Test01"></bean>-->
-<!--    <bean id="/test02" class="com.mashibing.controller.testController.Test02"></bean>-->
+<!--    <bean name="/test01" class="com.sewellzhong.controller.testController.Test01"></bean>-->
+<!--    <bean id="/test02" class="com.sewellzhong.controller.testController.Test02"></bean>-->
 
 <!--    <mvc:default-servlet-handler></mvc:default-servlet-handler>-->
 <!--    <mvc:annotation-driven/>-->
@@ -38,19 +38,19 @@
 <!--        &lt;!&ndash;配置的拦截器可以对具体的请求做限制，不一定所有的请求都要经过此拦截器，按照需求来指定即可&ndash;&gt;-->
 <!--&lt;!&ndash;        <mvc:interceptor>&ndash;&gt;-->
 <!--&lt;!&ndash;            <mvc:mapping path="/test01"/>&ndash;&gt;-->
-<!--&lt;!&ndash;            <bean class="com.mashibing.interceptor.HandlerMappingInterceptor"></bean>&ndash;&gt;-->
+<!--&lt;!&ndash;            <bean class="com.sewellzhong.interceptor.HandlerMappingInterceptor"></bean>&ndash;&gt;-->
 <!--&lt;!&ndash;        </mvc:interceptor>&ndash;&gt;-->
-<!--        <bean class="com.mashibing.interceptor.HandlerMappingInterceptor"/>-->
+<!--        <bean class="com.sewellzhong.interceptor.HandlerMappingInterceptor"/>-->
 <!--    </mvc:interceptors>-->
 
-    <context:component-scan base-package="com.mashibing"></context:component-scan>
+    <context:component-scan base-package="com.sewellzhong"></context:component-scan>
     <mvc:default-servlet-handler/>
     <mvc:annotation-driven></mvc:annotation-driven>
     <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
         <property name="suffix" value=".jsp"></property>
         <property name="prefix" value="/WEB-INF/jsp/"></property>
     </bean>
-<!--    <bean class="com.mashibing.controller.exception.MyExceptionHandlerExceptionResolver">-->
+<!--    <bean class="com.sewellzhong.controller.exception.MyExceptionHandlerExceptionResolver">-->
 <!--        <property name="order" value="-1"></property>-->
 <!--    </bean>-->
 </beans>
