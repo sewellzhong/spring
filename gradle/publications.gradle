@@ -1,5 +1,7 @@
 apply plugin: "maven-publish"
-apply plugin: 'com.jfrog.artifactory'
+// Disabled for local source study: Artifactory publishing is not needed for IDE import
+// or normal module compilation, and the legacy plugin dependencies may require restricted access.
+// apply plugin: 'com.jfrog.artifactory'
 
 publishing {
 	publications {
@@ -50,6 +52,8 @@ publishing {
 	}
 }
 
-artifactoryPublish {
-	publications(publishing.publications.mavenJava)
-}
+// Disabled together with the Artifactory plugin above. Keep the Maven publication metadata,
+// but do not register the Artifactory publish task in local learning environments.
+// artifactoryPublish {
+// 	publications(publishing.publications.mavenJava)
+// }

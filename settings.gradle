@@ -1,7 +1,9 @@
 pluginManagement {
 	repositories {
 		gradlePluginPortal()
-		maven { url 'https://repo.spring.io/plugins-release' }
+		// Keep the trailing slash: Gradle resolves plugins from the Maven repository URL,
+		// not from the repo.spring.io UI path, and a backslash is an invalid URI character.
+		maven { url 'https://repo.spring.io/plugins-release/' }
 	}
 }
 apply from: "$rootDir/gradle/build-cache-settings.gradle"
@@ -37,4 +39,3 @@ rootProject.children.each {project ->
 	project.buildFileName = "${project.name}.gradle"
 }
 include 'spring-debug'
-
