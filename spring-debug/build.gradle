@@ -36,4 +36,6 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     compile("com.alibaba:druid:1.2.4")
     compile("mysql:mysql-connector-java:5.1.48")
+//    bug fix: Fixed compatibility issues caused by the removal of JSR-250 annotations (e.g., @PostConstruct and @PreDestroy) from the JDK starting with Java 9.
+    compile("javax.annotation:javax.annotation-api:1.3.2")
 }
