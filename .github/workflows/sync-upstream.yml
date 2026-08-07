@@ -1,0 +1,114 @@
+name: Sync upstream Spring Framework
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mirror repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync upstream branches and tags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEFAULT_BRANCH="${GITHUB_REF_NAME:-main}"
+          PROTECTED_BRANCH="training-msb"
+          MIRRORED_BRANCHES_FILE=".github/upstream-mirror-branches.txt"
+
+          git remote add upstream https://github.com/spring-projects/spring-framework.git 2>/dev/null || \
+            git remote set-url upstream https://github.com/spring-projects/spring-framework.git
+
+          git fetch origin \
+            '+refs/heads/*:refs/remotes/origin/*' \
+            --prune
+
+          git fetch upstream \
+            '+refs/heads/*:refs/remotes/upstream/*' \
+            '+refs/tags/*:refs/tags/*' \
+            --prune --prune-tags
+
+          ORIGIN_DEFAULT_SHA="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          git checkout -B "${DEFAULT_BRANCH}" "upstream/${DEFAULT_BRANCH}"
+
+          git checkout "origin/${DEFAULT_BRANCH}" -- \
+            .github/workflows/sync-upstream.yml \
+            "${MIRRORED_BRANCHES_FILE}" \
+            GITHUB_MIRROR_SETUP_GUIDE.md
+
+          # This repository is a source mirror. Keep only the mirror sync workflow
+          # and remove upstream CI/release/docs workflows that are meant for
+          # spring-projects/spring-framework.
+          if [[ -d .github/workflows ]]; then
+            find .github/workflows -type f ! -name 'sync-upstream.yml' -delete
+          fi
+
+          mapfile -t previous_mirrored_branches < "${MIRRORED_BRANCHES_FILE}"
+          mapfile -t current_mirrored_branches < <(
+            git for-each-ref \
+              --format='%(refname:strip=3)' \
+              refs/remotes/upstream |
+              awk \
+                -v default_branch="${DEFAULT_BRANCH}" \
+                -v protected_branch="${PROTECTED_BRANCH}" \
+                '$0 != "HEAD" && $0 != default_branch && $0 != protected_branch' |
+              sort
+          )
+
+          printf '%s\n' "${current_mirrored_branches[@]}" > "${MIRRORED_BRANCHES_FILE}"
+
+          mapfile -t deleted_upstream_branches < <(
+            comm -23 \
+              <(printf '%s\n' "${previous_mirrored_branches[@]}" | sort -u) \
+              <(printf '%s\n' "${current_mirrored_branches[@]}")
+          )
+
+          for branch in "${deleted_upstream_branches[@]}"; do
+            if [[ -z "${branch}" || "${branch}" == "${DEFAULT_BRANCH}" || "${branch}" == "${PROTECTED_BRANCH}" ]]; then
+              continue
+            fi
+
+            if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+              git push origin --delete "${branch}"
+            fi
+          done
+
+          git add -A \
+            .github/workflows \
+            "${MIRRORED_BRANCHES_FILE}" \
+            GITHUB_MIRROR_SETUP_GUIDE.md
+
+          if git diff --cached --quiet "origin/${DEFAULT_BRANCH}"; then
+            git reset --hard "origin/${DEFAULT_BRANCH}"
+          else
+            git commit -m "Sync upstream and keep mirror-only GitHub Actions"
+            git push \
+              --force-with-lease="refs/heads/${DEFAULT_BRANCH}:${ORIGIN_DEFAULT_SHA}" \
+              origin "HEAD:refs/heads/${DEFAULT_BRANCH}"
+          fi
+
+          for branch in "${current_mirrored_branches[@]}"; do
+            git push origin "+refs/remotes/upstream/${branch}:refs/heads/${branch}"
+          done
+
+          git push --prune origin '+refs/tags/*:refs/tags/*'
