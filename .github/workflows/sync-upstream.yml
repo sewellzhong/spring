@@ -1,0 +1,254 @@
+name: Sync upstream Spring Framework
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mirror repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync upstream branches and tags
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIRROR_SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          DEFAULT_BRANCH="${GITHUB_REF_NAME:-main}"
+          PROTECTED_BRANCH="training-msb"
+          MIRRORED_BRANCHES_FILE=".github/upstream-mirror-branches.txt"
+          ORIGIN_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+          ORIGIN_SSH_URL="git@github.com:${GITHUB_REPOSITORY}.git"
+          SSH_DIR="${RUNNER_TEMP}/spring-mirror-ssh"
+          SSH_KEY_PATH="${SSH_DIR}/id_ed25519"
+          SSH_KNOWN_HOSTS_PATH="${SSH_DIR}/known_hosts"
+
+          if [[ -z "${MIRROR_SSH_PRIVATE_KEY:-}" ]]; then
+            echo "::error::Repository secret MIRROR_SSH_PRIVATE_KEY is required"
+            exit 1
+          fi
+
+          GITHUB_AUTH_HEADER="$(
+            printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w 0
+          )"
+
+          git_with_github_token() {
+            git -c \
+              "http.https://github.com/.extraheader=AUTHORIZATION: basic ${GITHUB_AUTH_HEADER}" \
+              "$@"
+          }
+
+          git_with_mirror_key() {
+            GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS_PATH}" \
+              git "$@"
+          }
+
+          install -d -m 700 "${SSH_DIR}"
+          printf '%s\n' "${MIRROR_SSH_PRIVATE_KEY}" > "${SSH_KEY_PATH}"
+          chmod 600 "${SSH_KEY_PATH}"
+          printf '%s\n' \
+            'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' \
+            > "${SSH_KNOWN_HOSTS_PATH}"
+          chmod 600 "${SSH_KNOWN_HOSTS_PATH}"
+          trap 'rm -f "${SSH_KEY_PATH}" "${SSH_KNOWN_HOSTS_PATH}"; rmdir "${SSH_DIR}" 2>/dev/null || true' EXIT
+
+          if ! ssh-keygen -y -f "${SSH_KEY_PATH}" >/dev/null; then
+            echo "::error::MIRROR_SSH_PRIVATE_KEY is not a valid private key"
+            exit 1
+          fi
+
+          git remote set-url origin "${ORIGIN_URL}"
+
+          git remote add upstream https://github.com/spring-projects/spring-framework.git 2>/dev/null || \
+            git remote set-url upstream https://github.com/spring-projects/spring-framework.git
+
+          git_with_github_token fetch origin \
+            '+refs/heads/*:refs/remotes/origin/*' \
+            '+refs/tags/*:refs/origin-tags/*' \
+            --prune
+
+          git fetch upstream \
+            '+refs/heads/*:refs/remotes/upstream/*' \
+            '+refs/tags/*:refs/upstream-tags/*' \
+            --prune
+
+          if ! git_with_mirror_key ls-remote "${ORIGIN_SSH_URL}" HEAD >/dev/null; then
+            echo "::error::MIRROR_SSH_PRIVATE_KEY cannot access ${GITHUB_REPOSITORY}"
+            exit 1
+          fi
+
+          ORIGIN_DEFAULT_SHA="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          git checkout -B "${DEFAULT_BRANCH}" "upstream/${DEFAULT_BRANCH}"
+
+          git checkout "origin/${DEFAULT_BRANCH}" -- \
+            .github/workflows/sync-upstream.yml \
+            "${MIRRORED_BRANCHES_FILE}" \
+            GITHUB_MIRROR_SETUP_GUIDE.md
+
+          # This repository is a source mirror. Keep only the mirror sync workflow
+          # and remove upstream CI/release/docs workflows that are meant for
+          # spring-projects/spring-framework.
+          if [[ -d .github/workflows ]]; then
+            find .github/workflows -type f ! -name 'sync-upstream.yml' -delete
+          fi
+
+          mapfile -t previous_mirrored_branches < "${MIRRORED_BRANCHES_FILE}"
+          mapfile -t current_mirrored_branches < <(
+            git for-each-ref \
+              --format='%(refname:strip=3)' \
+              refs/remotes/upstream |
+              awk \
+                -v default_branch="${DEFAULT_BRANCH}" \
+                -v protected_branch="${PROTECTED_BRANCH}" \
+                '$0 != "HEAD" && $0 != default_branch && $0 != protected_branch' |
+              sort
+          )
+
+          printf '%s\n' "${current_mirrored_branches[@]}" > "${MIRRORED_BRANCHES_FILE}"
+
+          mapfile -t deleted_upstream_branches < <(
+            comm -23 \
+              <(printf '%s\n' "${previous_mirrored_branches[@]}" | sort -u) \
+              <(printf '%s\n' "${current_mirrored_branches[@]}")
+          )
+
+          for branch in "${deleted_upstream_branches[@]}"; do
+            if [[ -z "${branch}" || "${branch}" == "${DEFAULT_BRANCH}" || "${branch}" == "${PROTECTED_BRANCH}" ]]; then
+              continue
+            fi
+
+            if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+              git_with_github_token push origin --delete "${branch}"
+            fi
+          done
+
+          git add -A \
+            .github/workflows \
+            "${MIRRORED_BRANCHES_FILE}" \
+            GITHUB_MIRROR_SETUP_GUIDE.md
+
+          if git diff --cached --quiet "origin/${DEFAULT_BRANCH}"; then
+            git reset --hard "origin/${DEFAULT_BRANCH}"
+          else
+            git commit -m "Sync upstream and keep mirror-only GitHub Actions"
+            git_with_github_token push \
+              --force-with-lease="refs/heads/${DEFAULT_BRANCH}:${ORIGIN_DEFAULT_SHA}" \
+              origin "HEAD:refs/heads/${DEFAULT_BRANCH}"
+          fi
+
+          for branch in "${current_mirrored_branches[@]}"; do
+            upstream_ref="refs/remotes/upstream/${branch}"
+            origin_ref="refs/remotes/origin/${branch}"
+            destination_ref="refs/heads/${branch}"
+            upstream_sha="$(git rev-parse "${upstream_ref}")"
+            upstream_tree="$(git rev-parse "${upstream_ref}^{tree}")"
+            origin_sha=""
+
+            if git show-ref --verify --quiet "${origin_ref}"; then
+              origin_sha="$(git rev-parse "${origin_ref}")"
+              origin_tree="$(git rev-parse "${origin_ref}^{tree}")"
+              origin_parent="$(git rev-parse "${origin_ref}^" 2>/dev/null || true)"
+
+              if [[ "${origin_tree}" == "${upstream_tree}" && "${origin_parent}" == "${upstream_sha}" ]]; then
+                echo "${branch} is already synchronized with ${upstream_sha}"
+                continue
+              fi
+            fi
+
+            mirror_commit="$(
+              printf 'Mirror upstream/%s [skip ci]\n\nUpstream-Commit: %s\n' \
+                "${branch}" "${upstream_sha}" |
+                git commit-tree "${upstream_tree}" -p "${upstream_sha}"
+            )"
+
+            if git ls-tree -d --name-only "${upstream_ref}" -- .github/workflows | grep -q .; then
+              git_with_mirror_key push \
+                --force-with-lease="${destination_ref}:${origin_sha}" \
+                "${ORIGIN_SSH_URL}" "${mirror_commit}:${destination_ref}"
+            else
+              git_with_github_token push \
+                --force-with-lease="${destination_ref}:${origin_sha}" \
+                origin "${mirror_commit}:${destination_ref}"
+            fi
+          done
+
+          mapfile -t origin_tags < <(
+            git for-each-ref --format='%(refname:strip=2)' refs/origin-tags | sort
+          )
+          mapfile -t upstream_tags < <(
+            git for-each-ref --format='%(refname:strip=2)' refs/upstream-tags | sort
+          )
+          mapfile -t deleted_upstream_tags < <(
+            comm -23 \
+              <(printf '%s\n' "${origin_tags[@]}") \
+              <(printf '%s\n' "${upstream_tags[@]}")
+          )
+
+          for tag in "${deleted_upstream_tags[@]}"; do
+            if [[ -n "${tag}" ]]; then
+              git_with_mirror_key push "${ORIGIN_SSH_URL}" --delete "refs/tags/${tag}"
+            fi
+          done
+
+          for tag in "${upstream_tags[@]}"; do
+            upstream_ref="refs/upstream-tags/${tag}"
+            origin_ref="refs/origin-tags/${tag}"
+            destination_ref="refs/tags/${tag}"
+            upstream_tag_object="$(git rev-parse "${upstream_ref}")"
+            origin_tag_object=""
+
+            if git show-ref --verify --quiet "${origin_ref}"; then
+              origin_tag_object="$(git rev-parse "${origin_ref}")"
+              if [[ "${origin_tag_object}" == "${upstream_tag_object}" ]]; then
+                continue
+              fi
+            fi
+
+            if ! upstream_commit="$(git rev-parse "${upstream_ref}^{commit}" 2>/dev/null)"; then
+              git_with_mirror_key push \
+                --force-with-lease="${destination_ref}:${origin_tag_object}" \
+                "${ORIGIN_SSH_URL}" "${upstream_tag_object}:${destination_ref}"
+              continue
+            fi
+
+            upstream_tree="$(git rev-parse "${upstream_commit}^{tree}")"
+            if [[ -n "${origin_tag_object}" ]]; then
+              origin_tree="$(git rev-parse "${origin_ref}^{tree}" 2>/dev/null || true)"
+              origin_parent="$(git rev-parse "${origin_ref}^{commit}^" 2>/dev/null || true)"
+              if [[ "${origin_tree}" == "${upstream_tree}" && "${origin_parent}" == "${upstream_commit}" ]]; then
+                continue
+              fi
+            fi
+
+            mirror_commit="$(
+              printf 'Mirror upstream tag %s [skip ci]\n\nUpstream-Commit: %s\n' \
+                "${tag}" "${upstream_commit}" |
+                git commit-tree "${upstream_tree}" -p "${upstream_commit}"
+            )"
+
+            git_with_mirror_key push \
+              --force-with-lease="${destination_ref}:${origin_tag_object}" \
+              "${ORIGIN_SSH_URL}" "${mirror_commit}:${destination_ref}"
+          done
